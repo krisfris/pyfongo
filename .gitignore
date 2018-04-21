@@ -4,3 +4,4 @@ dist
 __pycache__
 *.swp
 .cache
+.pytest_cache

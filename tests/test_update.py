@@ -1,4 +1,3 @@
-
 def test_update_one(cx):
     doc = {'hello': 'world'}
     _id = cx.mydb.mycol.insert_one(doc).inserted_id

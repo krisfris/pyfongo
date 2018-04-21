@@ -1,9 +1,10 @@
+import os
 import json
-from blinker import signal
 from bson import ObjectId, json_util
 from collections import defaultdict, namedtuple
 
 InsertOneResult = namedtuple('InsertOneResult', ['inserted_id'])
+InsertManyResult = namedtuple('InsertManyResult', ['inserted_ids'])
 
 def _project(doc, projection):
     """Return new doc with items filtered according to projection."""
@@ -29,106 +30,139 @@ def _match(doc, query):
     return True
 
 class Collection:
-    def __init__(self):
-        self._documents = []
+    def __init__(self, path):
+        self._path = path
+        os.makedirs(path, exist_ok=True)
+
+    def _iter_col(self):
+        for filename in os.listdir(self._path):
+            path = os.path.join(self._path, filename)
+            with open(path) as f:
+                docs = json_util.loads(f.read())
+            yield from docs
 
     def find(self, query={}, projection={}):
-        for doc in self._documents:
+        for doc in self._iter_col():
             if _match(doc, query):
                 yield _project(doc, projection)
 
     def find_one(self, query={}, projection={}):
-        for doc in self._documents:
-            if _match(doc, query):
-                return _project(doc, projection)
-        return None
+        try:
+            return next(self.find(query, projection))
+        except StopIteration:
+            return None
 
     def insert_one(self, doc):
         if '_id' not in doc:
             doc['_id'] = ObjectId()
-        self._documents.append(doc)
-        signal('data-changed').send()
+
+        # Create new file for now, TODO change this later
+        path = os.path.join(self._path, str(doc['_id']) + '.json')
+        with open(path, 'w') as f:
+            f.write(json_util.dumps([doc]))
+
         return InsertOneResult(doc['_id'])
 
+    def insert_many(self, docs):
+        for doc in docs:
+            if '_id' not in doc:
+                doc['_id'] = ObjectId()
+
+        # Create new file for now, TODO change this later
+        path = os.path.join(self._path, str(doc[0]['_id']) + '.json')
+        with open(path, 'w') as f:
+            f.write(json_util.dumps(docs))
+
+        return InsertManyResult([doc['_id'] for doc in docs])
+
     def update_one(self, query, update):
-        doc = self.find_one(query)
-        if not doc:
-            return
-        for k, v in update['$set'].items():
-            doc[k] = v
-        for i, x in enumerate(self._documents):
-            if x['_id'] == doc['_id']:
-                self._documents[i] = doc
-        signal('data-changed').send()
+        for filename in os.listdir(self._path):
+            path = os.path.join(self._path, filename)
+            with open(path) as f:
+                docs = json_util.loads(f.read())
+            for doc in docs:
+                if _match(doc, query):
+                    for k, v in update['$set'].items():
+                        doc[k] = v
+                    with open(path, 'w') as f:
+                        f.write(json_util.dumps(docs))
+                    return # TODO return correct value
+        return # TODO return correct value
 
     def update_many(self, query, doc):
-        pass
+        for filename in os.listdir(self._path):
+            path = os.path.join(self._path, filename)
+            with open(path) as f:
+                docs = json_util.loads(f.read())
+            matched = False
+            for doc in docs:
+                if _match(doc, query):
+                    matched = True
+                    for k, v in update['$set'].items():
+                        doc[k] = v
+            if matched:
+                with open(path, 'w') as f:
+                    f.write(json_util.dumps(docs))
+        return # TODO return correct value
 
     def delete_one(self, query):
-        pass
+        for filename in os.listdir(self._path):
+            path = os.path.join(self._path, filename)
+            with open(path) as f:
+                docs = json_util.loads(f.read())
+            new_docs = []
+            matched_count = 0
+            for doc in docs:
+                if _match(doc, query) and matched_count == 0:
+                    matched_count += 1
+                    continue
+                else:
+                    new_docs.append(doc)
+            if matched_count > 0:    
+                with open(path, 'w') as f:
+                    f.write(json_util.dumps(new_docs))
+                return # TODO return correct value
+        return # TODO return correct value
 
     def delete_many(self, query):
-        pass
+        for filename in os.listdir(self._path):
+            path = os.path.join(self._path, filename)
+            with open(path) as f:
+                docs = json_util.loads(f.read())
+            docs = [x for x in docs if not _match(x, query)]
+            with open(path, 'w') as f:
+                f.write(json_util.dumps(docs))
+        return # TODO return correct value
 
 class Database:
-    def __init__(self):
-        self._collections = defaultdict(Collection)
+    def __init__(self, path):
+        self._path = path
+        os.makedirs(path, exist_ok=True)
 
     def __getattr__(self, attr):
-        return self._collections[attr]
+        return Collection(os.path.join(self._path, attr))
+
+    def collection_names(self):
+        return os.listdir(self._path)
 
     __getitem__ = __getattr__
 
-class MongoClient:
-    def __init__(self, autosave=False, path=None):
-        self.path = path
-        self.autosave = autosave
-
-        if autosave:
-            signal('data-changed').connect(self._data_changed)
-
-        if path:
-            try:
-                self.load()
-            except FileNotFoundError:
-                pass
-        else:
-            self.reset()
+class FongoClient:
+    def __init__(self, path):
+        self._path = path
 
     def __getattr__(self, attr):
-        return self._databases[attr]
+        return Database(os.path.join(self._path, attr))
 
     __getitem__ = __getattr__
-
-    def _data_changed(self, sender):
-        self.save()
-
-    def reset(self):
-        self._databases = defaultdict(Database)
 
     def database_names(self):
-        return list(self._databases.keys())
+        return os.listdir(self._path)
 
-    def save(self):
-        data = {'databases': {}}
-        for db_name, db in self._databases.items():
-            data['databases'][db_name] = {'collections': {}}
-            for col_name, col in db._collections.items():
-                data['databases'][db_name]['collections'][col_name] = {}
-                data['databases'][db_name]['collections'][col_name]['documents'] = col._documents
-        open(self.path, 'w').write(json_util.dumps(data))
-
-    def load(self):
-        self.reset()
-        data = json_util.loads(open(self.path).read())
-        for db_name, db in data['databases'].items():
-            for col_name, col in db['collections'].items():
-                self[db_name][col_name]._documents = col['documents']
-
-class PyMongo:
+class PyFongo:
     """This class is for flask apps that use flask_pymongo."""
     def init_app(self, app):
-        self._cx = MongoClient()
+        self._cx = FongoClient(app.config['MONGO_PATH'])
         self._db = self._cx[app.config['MONGO_DBNAME']]
 
     @property
@@ -140,11 +174,19 @@ class PyMongo:
         return self._db
 
 if __name__ == '__main__':
-    class App:
-        config = dict(MONGO_DBNAME='hello')
-    mongo = PyMongo()
-    mongo.init_app(App())
-    r = mongo.db.dataset_data.insert_one({'hello': 'world'})
-    r = mongo.db.dataset_data.insert_one({'hello': 'peter'})
-    r = mongo.db.dataset_data.find_one()
-    print(r)
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        print('using tmpdir', tmpdir)
+
+        class App:
+            config = dict(MONGO_DBNAME='hello', MONGO_PATH=tmpdir)
+
+        mongo = PyFongo()
+        mongo.init_app(App())
+
+        r = mongo.db.dataset_data.insert_one({'hello': 'world'})
+        r = mongo.db.dataset_data.insert_one({'hello': 'peter'})
+        r = mongo.db.dataset_data.find_one()
+
+        print(r)
