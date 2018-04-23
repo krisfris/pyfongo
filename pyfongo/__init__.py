@@ -1,14 +1,14 @@
 import os
-import json
 import shutil
 from bson import ObjectId, json_util
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 from operator import itemgetter
 
-from pymongo import ASCENDING, DESCENDING, errors
+from pymongo import ASCENDING, DESCENDING, errors  # noqa
 
 InsertOneResult = namedtuple('InsertOneResult', ['inserted_id'])
 InsertManyResult = namedtuple('InsertManyResult', ['inserted_ids'])
+
 
 def _project(doc, projection):
     """Return new doc with items filtered according to projection."""
@@ -26,12 +26,14 @@ def _project(doc, projection):
         return True
     return {k: v for k, v in doc.items() if _include_key(k, projection)}
 
+
 def _match(doc, query):
     """Decide whether doc matches query."""
     for k, v in query.items():
         if doc.get(k, object()) != v:
             return False
     return True
+
 
 class Cursor:
     def __init__(self, collection, query={}, projection={}, sort=None):
@@ -72,6 +74,7 @@ class Cursor:
         else:
             raise TypeError('key_or_list has invalid type')
         return self
+
 
 class Collection:
     def __init__(self, path):
@@ -128,10 +131,10 @@ class Collection:
                         doc[k] = v
                     with open(path, 'w') as f:
                         f.write(json_util.dumps(docs))
-                    return # TODO return correct value
-        return # TODO return correct value
+                    return  # TODO return correct value
+        return  # TODO return correct value
 
-    def update_many(self, query, doc):
+    def update_many(self, query, update):
         for filename in os.listdir(self._path):
             path = os.path.join(self._path, filename)
             with open(path) as f:
@@ -145,7 +148,7 @@ class Collection:
             if matched:
                 with open(path, 'w') as f:
                     f.write(json_util.dumps(docs))
-        return # TODO return correct value
+        return  # TODO return correct value
 
     def delete_one(self, query):
         for filename in os.listdir(self._path):
@@ -160,11 +163,11 @@ class Collection:
                     continue
                 else:
                     new_docs.append(doc)
-            if matched_count > 0:    
+            if matched_count > 0:
                 with open(path, 'w') as f:
                     f.write(json_util.dumps(new_docs))
-                return # TODO return correct value
-        return # TODO return correct value
+                return  # TODO return correct value
+        return  # TODO return correct value
 
     def delete_many(self, query):
         for filename in os.listdir(self._path):
@@ -174,7 +177,8 @@ class Collection:
             docs = [x for x in docs if not _match(x, query)]
             with open(path, 'w') as f:
                 f.write(json_util.dumps(docs))
-        return # TODO return correct value
+        return  # TODO return correct value
+
 
 class Database:
     def __init__(self, path):
@@ -188,6 +192,7 @@ class Database:
         return os.listdir(self._path)
 
     __getitem__ = __getattr__
+
 
 class FongoClient:
     def __init__(self, path):
@@ -204,6 +209,7 @@ class FongoClient:
     def drop_database(self, name):
         shutil.rmtree(os.path.join(self._path, name))
 
+
 class PyFongo:
     """This class is for flask apps that use flask_pymongo."""
     def init_app(self, app):
@@ -217,6 +223,7 @@ class PyFongo:
     @property
     def db(self):
         return self._db
+
 
 if __name__ == '__main__':
     import tempfile

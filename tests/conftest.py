@@ -4,6 +4,7 @@ import pytest
 from pyfongo import FongoClient
 from pymongo import MongoClient
 
+
 @pytest.fixture(params=['pymongo', 'pyfongo'])
 def cx(request):
     if request.param == 'pymongo':
@@ -13,6 +14,7 @@ def cx(request):
             yield FongoClient(tmpdir)
     else:
         raise ValueError('Invalid fixture param.')
+
 
 @pytest.fixture
 def db(cx):
