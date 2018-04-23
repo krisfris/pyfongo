@@ -30,6 +30,16 @@ def _match(doc, query):
             return False
     return True
 
+class Cursor:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._docs)
+
 class Collection:
     def __init__(self, path):
         self._path = path
@@ -43,9 +53,8 @@ class Collection:
             yield from docs
 
     def find(self, query={}, projection={}):
-        for doc in self._iter_col():
-            if _match(doc, query):
-                yield _project(doc, projection)
+        return Cursor(_project(x, projection) for x in self._iter_col()
+                      if _match(x, query))
 
     def find_one(self, query={}, projection={}):
         try:
