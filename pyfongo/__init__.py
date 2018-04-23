@@ -70,7 +70,7 @@ class Collection:
                 doc['_id'] = ObjectId()
 
         # Create new file for now, TODO change this later
-        path = os.path.join(self._path, str(doc[0]['_id']) + '.json')
+        path = os.path.join(self._path, str(docs[0]['_id']) + '.json')
         with open(path, 'w') as f:
             f.write(json_util.dumps(docs))
 
