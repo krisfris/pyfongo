@@ -3,6 +3,9 @@ import json
 import shutil
 from bson import ObjectId, json_util
 from collections import defaultdict, namedtuple
+from operator import itemgetter
+
+from pymongo import ASCENDING, DESCENDING, errors
 
 InsertOneResult = namedtuple('InsertOneResult', ['inserted_id'])
 InsertManyResult = namedtuple('InsertManyResult', ['inserted_ids'])
@@ -31,14 +34,44 @@ def _match(doc, query):
     return True
 
 class Cursor:
-    def __init__(self, docs):
-        self._docs = docs
+    def __init__(self, collection, query={}, projection={}, sort=None):
+        self._col = collection
+        self._query = query
+        self._projection = projection
+        self._sort = sort
+
+        self._docs = None
+
+    def _execute(self):
+        self._docs = (_project(x, self._projection) for x in self._col._iter_col()
+                      if _match(x, self._query))
+        if self._sort is not None:
+            s = list(self._docs)
+            for key, direction in reversed(self._sort):
+                s = sorted(s, key=itemgetter(key),
+                           reverse=True if direction == -1 else False)
+            self._docs = iter(s)
 
     def __iter__(self):
         return self
 
     def __next__(self):
+        if self._docs is None:
+            self._execute()
         return next(self._docs)
+
+    def sort(self, key_or_list, direction=None):
+        if self._docs is not None:
+            raise errors.InvalidOperation('cannot set options after executing query')
+        if isinstance(key_or_list, str):
+            if direction is None:
+                direction = 1
+            self._sort = [(key_or_list, direction)]
+        elif isinstance(key_or_list, list):
+            self._sort = key_or_list
+        else:
+            raise TypeError('key_or_list has invalid type')
+        return self
 
 class Collection:
     def __init__(self, path):
@@ -53,8 +86,7 @@ class Collection:
             yield from docs
 
     def find(self, query={}, projection={}):
-        return Cursor(_project(x, projection) for x in self._iter_col()
-                      if _match(x, query))
+        return Cursor(self, query, projection)
 
     def find_one(self, query={}, projection={}):
         try:
