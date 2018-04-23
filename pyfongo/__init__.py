@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 from bson import ObjectId, json_util
 from collections import defaultdict, namedtuple
 
@@ -158,6 +159,9 @@ class FongoClient:
 
     def database_names(self):
         return os.listdir(self._path)
+
+    def drop_database(self, name):
+        shutil.rmtree(os.path.join(self._path, name))
 
 class PyFongo:
     """This class is for flask apps that use flask_pymongo."""
