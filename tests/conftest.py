@@ -13,3 +13,8 @@ def cx(request):
             yield FongoClient(tmpdir)
     else:
         raise ValueError('Invalid fixture param.')
+
+@pytest.fixture
+def db(cx):
+    yield cx.test_pyfongo
+    cx.drop_database('test_pyfongo')
