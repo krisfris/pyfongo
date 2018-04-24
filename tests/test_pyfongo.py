@@ -23,3 +23,27 @@ def test_sort_after_retrieve(db):
     next(cursor)
     with pytest.raises(pyfongo.errors.InvalidOperation):
         cursor.sort('hello')
+
+
+def test_count(db):
+    assert db.col.find().limit(1).count() == 2
+
+
+def test_count_with_limit(db):
+    assert db.col.find().limit(1).count(True) == 1
+
+
+def test_count_with_skip(db):
+    assert db.col.find().skip(1).count(True) == 1
+
+
+def test_skip(db):
+    docs = list(db.col.find().sort([('hello', 1)]).skip(1))
+    assert len(docs) == 1
+    assert docs[0]['hello'] == 'bob'
+
+
+def test_limit(db):
+    docs = list(db.col.find().sort([('hello', -1)]).limit(1))
+    assert len(docs) == 1
+    assert docs[0]['hello'] == 'bob'

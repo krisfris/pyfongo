@@ -3,6 +3,7 @@ import shutil
 from bson import ObjectId, json_util
 from collections import namedtuple
 from operator import itemgetter
+from itertools import islice
 
 from pymongo import ASCENDING, DESCENDING, errors  # noqa
 
@@ -35,24 +36,43 @@ def _match(doc, query):
     return True
 
 
+def _iter_docs(col, query, projection, sort, skip, limit):
+    docs = (_project(x, projection) for x in col._iter_col()
+            if _match(x, query))
+
+    # Apply sort
+    if sort is not None:
+        s = list(docs)
+        for key, direction in reversed(sort):
+            s = sorted(s, key=itemgetter(key),
+                       reverse=True if direction == -1 else False)
+        docs = iter(s)
+
+    # Apply skip and limit
+    docs = islice(docs, skip, (skip+limit) if limit else None)
+
+    return docs
+
+
 class Cursor:
-    def __init__(self, collection, query={}, projection={}, sort=None):
+    def __init__(self, collection, query={}, projection={}, sort=None,
+                 skip=0, limit=0):
         self._col = collection
         self._query = query
         self._projection = projection
         self._sort = sort
+        self._skip = skip
+        self._limit = limit
 
         self._docs = None
 
     def _execute(self):
-        self._docs = (_project(x, self._projection) for x in self._col._iter_col()
-                      if _match(x, self._query))
-        if self._sort is not None:
-            s = list(self._docs)
-            for key, direction in reversed(self._sort):
-                s = sorted(s, key=itemgetter(key),
-                           reverse=True if direction == -1 else False)
-            self._docs = iter(s)
+        self._docs = _iter_docs(self._col, self._query, self._projection,
+                                self._sort, self._skip, self._limit)
+
+    def _check_okay_to_chain(self):
+        if self._docs is not None:
+            raise errors.InvalidOperation('cannot set options after executing query')
 
     def __iter__(self):
         return self
@@ -63,8 +83,18 @@ class Cursor:
         return next(self._docs)
 
     def sort(self, key_or_list, direction=None):
-        if self._docs is not None:
-            raise errors.InvalidOperation('cannot set options after executing query')
+        """Sorts this cursor's results.
+
+        Takes either a single key and a direction, or a list of (key,
+        direction) pairs. The key(s) must be an instance of ``(str,
+        unicode)``, and the direction(s) must be one of
+        (:data:`~pymongo.ASCENDING`,
+        :data:`~pymongo.DESCENDING`). Raises
+        :class:`~pymongo.errors.InvalidOperation` if this cursor has
+        already been used. Only the last :meth:`sort` applied to this
+        cursor has any effect.
+        """
+        self._check_okay_to_chain()
         if isinstance(key_or_list, str):
             if direction is None:
                 direction = 1
@@ -74,6 +104,50 @@ class Cursor:
         else:
             raise TypeError('key_or_list has invalid type')
         return self
+
+    def skip(self, n):
+        """Skips the first `n` results of this cursor.
+
+        Raises TypeError if skip is not an instance of int. Raises
+        InvalidOperation if this cursor has already been used. The last `n`
+        applied to this cursor takes precedence.
+        """
+        if not isinstance(n, int):
+            raise TypeError('skip must be an int')
+        self._check_okay_to_chain()
+
+        self._skip = n
+        return self
+
+    def limit(self, n):
+        """Limits the number of results to be returned by this cursor.
+
+        Raises TypeError if limit is not an instance of int. Raises
+        InvalidOperation if this cursor has already been used. The
+        last `n` applied to this cursor takes precedence. A limit
+        of ``0`` is equivalent to no limit.
+        """
+        if not isinstance(n, int):
+            raise TypeError('n must be an int')
+        self._check_okay_to_chain()
+
+        self._limit = n
+        return self
+
+    def count(self, with_limit_and_skip=False):
+        """Get the size of the results set for this query.
+
+        Returns the number of documents in the results set for this query. Does
+        not take :meth:`limit` and :meth:`skip` into account by default - set
+        `with_limit_and_skip` to ``True`` if that is the desired behavior.
+        """
+        if with_limit_and_skip:
+            docs = _iter_docs(self._col, self._query, self._projection,
+                              None, self._skip, self._limit)
+        else:
+            docs = _iter_docs(self._col, self._query, self._projection,
+                              None, None, None)
+        return sum(1 for _ in docs)
 
 
 class Collection:
