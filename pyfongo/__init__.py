@@ -287,8 +287,8 @@ class FongoClient:
 class PyFongo:
     """This class is for flask apps that use flask_pymongo."""
     def init_app(self, app):
-        self._cx = FongoClient(app.config['MONGO_PATH'])
-        self._db = self._cx[app.config['MONGO_DBNAME']]
+        self._cx = FongoClient(app.config['FONGO_PATH'])
+        self._db = self._cx[app.config['FONGO_DBNAME']]
 
     @property
     def cx(self):
@@ -306,13 +306,13 @@ if __name__ == '__main__':
         print('using tmpdir', tmpdir)
 
         class App:
-            config = dict(MONGO_DBNAME='hello', MONGO_PATH=tmpdir)
+            config = dict(FONGO_DBNAME='hello', FONGO_PATH=tmpdir)
 
-        mongo = PyFongo()
-        mongo.init_app(App())
+        fongo = PyFongo()
+        fongo.init_app(App())
 
-        r = mongo.db.dataset_data.insert_one({'hello': 'world'})
-        r = mongo.db.dataset_data.insert_one({'hello': 'peter'})
-        r = mongo.db.dataset_data.find_one()
+        r = fongo.db.dataset_data.insert_one({'hello': 'world'})
+        r = fongo.db.dataset_data.insert_one({'hello': 'peter'})
+        r = fongo.db.dataset_data.find_one()
 
         print(r)
