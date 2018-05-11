@@ -7,7 +7,6 @@ verify_ssl = true
 
 [packages]
 
-blinker = "*"
 pymongo = "*"
 
 
@@ -16,6 +15,7 @@ pymongo = "*"
 pytest = "*"
 "e1839a8" = {editable = true, path = "."}
 pylama = "*"
+twine = "*"
 
 
 [requires]
