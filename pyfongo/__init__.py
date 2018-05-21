@@ -171,6 +171,13 @@ class Collection:
         except StopIteration:
             return None
 
+    def distinct(self, key):
+        values = set()
+        for doc in self.find():
+            if key in doc:
+                values.add(doc[key])
+        return list(values)
+
     def insert_one(self, doc):
         if '_id' not in doc:
             doc['_id'] = ObjectId()
