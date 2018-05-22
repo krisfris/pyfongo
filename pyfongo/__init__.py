@@ -4,6 +4,7 @@ from bson import ObjectId, json_util
 from collections import namedtuple
 from operator import itemgetter
 from itertools import islice
+from atomicwrites import atomic_write
 
 from pymongo import ASCENDING, DESCENDING, errors  # noqa
 
@@ -184,7 +185,7 @@ class Collection:
 
         # Create new file for now, TODO change this later
         path = os.path.join(self._path, str(doc['_id']) + '.json')
-        with open(path, 'w') as f:
+        with atomic_write(path) as f:
             f.write(json_util.dumps([doc]))
 
         return InsertOneResult(doc['_id'])
@@ -196,7 +197,7 @@ class Collection:
 
         # Create new file for now, TODO change this later
         path = os.path.join(self._path, str(docs[0]['_id']) + '.json')
-        with open(path, 'w') as f:
+        with atomic_write(path) as f:
             f.write(json_util.dumps(docs))
 
         return InsertManyResult([doc['_id'] for doc in docs])
@@ -210,7 +211,7 @@ class Collection:
                 if _match(doc, query):
                     for k, v in update['$set'].items():
                         doc[k] = v
-                    with open(path, 'w') as f:
+                    with atomic_write(path, overwrite=True) as f:
                         f.write(json_util.dumps(docs))
                     return  # TODO return correct value
         return  # TODO return correct value
@@ -227,7 +228,7 @@ class Collection:
                     for k, v in update['$set'].items():
                         doc[k] = v
             if matched:
-                with open(path, 'w') as f:
+                with atomic_write(path, overwrite=True) as f:
                     f.write(json_util.dumps(docs))
         return  # TODO return correct value
 
@@ -245,7 +246,7 @@ class Collection:
                 else:
                     new_docs.append(doc)
             if matched_count > 0:
-                with open(path, 'w') as f:
+                with atomic_write(path, overwrite=True) as f:
                     f.write(json_util.dumps(new_docs))
                 return  # TODO return correct value
         return  # TODO return correct value
@@ -256,7 +257,7 @@ class Collection:
             with open(path) as f:
                 docs = json_util.loads(f.read())
             docs = [x for x in docs if not _match(x, query)]
-            with open(path, 'w') as f:
+            with atomic_write(path, overwrite=True) as f:
                 f.write(json_util.dumps(docs))
         return  # TODO return correct value
 

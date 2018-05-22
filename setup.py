@@ -22,5 +22,5 @@ setup(
     long_description=read('README.md'),
     long_description_content_type='text/markdown',
     data_files=[('', ['LICENSE', 'README.md'])],
-    install_requires=['pymongo']
+    install_requires=['pymongo', 'atomicwrites']
 )
